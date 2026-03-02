@@ -1,11 +1,11 @@
 import type express from "express";
 
-import SQL from "sql-template-strings";
-
+import { queryData } from "../config/databricks.js";
 import { buildProviderDetailsQuery } from "../queryBuilders/providerDetails.js";
-import { buildProviderMonthlyQuery, checkedFilter } from "../queryBuilders/providerMonthly.js";
-import { buildProviderYearlyQuery } from "../queryBuilders/providerYearly.js";
-import { queryData } from "../services/queryService.js";
+import { buildProviderMonthlyQuery } from "../queryBuilders/providerMonthly.js";
+import { buildFlaggedCountQuery, buildHighestRiskScoreQuery, buildHighRiskCountQuery, buildProviderCountQuery } from "../queryBuilders/providers/overview.js";
+import { buildProviderYearlyFacetQuery, buildProviderYearlyQuery } from "../queryBuilders/providerYearly.js";
+import { parseProviderFilters } from "./parseProviderFilters.js";
 
 export type MonthlyProviderData = {
   provider_licensing_id: string;
@@ -40,6 +40,9 @@ export type UiMonthlyProviderData = {
 };
 
 export type AnnualProviderData = {
+  capacity_licensed: string;
+  provider_facility_type: string;
+  provider_status: string;
   provider_licensing_id: string;
   provider_name: string;
   StartOfMonth: string; // ISO DateString
@@ -79,8 +82,8 @@ export type ProviderDetailsData = {
   provider_status: string;
   provider_type: string;
   provider_email: string;
-  provider_phone: string
-}
+  provider_phone: string;
+};
 
 export type UiProviderDetailsData = {
   providerLicensingId: string;
@@ -91,26 +94,13 @@ export type UiProviderDetailsData = {
   providerStatus: string;
   providerType: string;
   providerEmail: string;
-  providerPhone: string
-}
+  providerPhone: string;
+};
 
 export async function exportProviderDataMonthly(req: express.Request, res: express.Response) {
-  const month = req.params.month;
-  const offset = req.query.offset || "0";
-  const isFlagged = req.query.flagStatus === "true";
-  const isUnflagged = req.query.flagStatus === "false";
-
-  const cities: string[] = Array.isArray(req.query.cities)
-    ? req.query.cities.map(String)
-    : req.query.cities
-      ? [String(req.query.cities)]
-      : [];
-
-  // we need to extract the values for city from the req.query then pass them to the build function
-  // update the build function to include the multi value where clause
-  const flagged = checkedFilter({ flagged: isFlagged, unflagged: isUnflagged });
-  // TODO: 
-  const { text, namedParameters } = buildProviderMonthlyQuery({ offset: String(offset), month, isFlagged: flagged, cities });
+  const filters = parseProviderFilters(req);
+  // TODO:
+  const { text, namedParameters } = buildProviderMonthlyQuery({ offset: filters.offset, month: filters.month!, flagStatus: filters.flagStatus, cities: filters.cities });
 
   try {
     // const rawData: MonthlyProviderData[] = await queryData(text, namedParameters);
@@ -132,7 +122,7 @@ export async function exportProviderDataMonthly(req: express.Request, res: expre
         // zip: item.zip || "--",
       };
     });
-     const headers = [
+    const headers = [
       "provider_licensing_id",
       "provider_name",
       "total_billed_over_capacity",
@@ -160,40 +150,24 @@ export async function exportProviderDataMonthly(req: express.Request, res: expre
 
     // Set headers for download
     res.setHeader("Content-Type", "text/csv; charset=utf-8");
-    res.setHeader("Content-Disposition", `attachment; filename="providers_${month}.csv"`);
+    res.setHeader("Content-Disposition", `attachment; filename="providers_${filters.month}.csv"`);
 
     res.send(csv);
   }
   catch (err: any) {
     res.status(500).json({ error: err.message });
   }
-
-
 }
-//  TODO - clean up
-// @desc    Get provider overview data - overview data that will be displayed in FE dashboard cards
-// @route   put /api/v1/providerData/overview
-// @access  Private
+
 export async function exportProviderDataYearly(req: express.Request, res: express.Response) {
-  const yearNum = Number.parseInt(req.params.year, 10);
+  const yearNum = Number.parseInt(req.params.date, 10);
   if (Number.isNaN(yearNum) || yearNum < 1980 || yearNum > 2100) {
     return res.status(400).json({ error: "Invalid year parameter" });
   }
 
-  const offset = req.query.offset || "0";
-  const isFlagged = req.query.flagStatus === "true";
-  const isUnflagged = req.query.flagStatus === "false";
-  const flagged = checkedFilter({ flagged: isFlagged, unflagged: isUnflagged });
+  const filters = parseProviderFilters(req);
 
-  const cities: string[] = Array.isArray(req.query.cities)
-    ? req.query.cities.map(String)
-    : req.query.cities
-      ? [String(req.query.cities)]
-      : [];
-
-  const { text, namedParameters } = buildProviderYearlyQuery({ offset: String(offset), year: String(yearNum), isFlagged: flagged, cities });
-
-  
+  const { text, namedParameters } = buildProviderYearlyQuery({ offset: filters.offset, year: String(yearNum), flagStatus: filters.flagStatus, cities: filters.cities, licenseCapacity: filters.licenseCapacity });
   try {
     const rawData = await queryData(text, namedParameters);
     const result: Partial<AnnualProviderData>[] = rawData.map((item: any) => {
@@ -255,21 +229,11 @@ export async function exportProviderDataYearly(req: express.Request, res: expres
   }
 }
 
-//  TODO - clean up
-// @desc    Get provider overview data - overview data that will be displayed in FE dashboard cards
-// @route   put /api/v1/providerData/overview
-// @access  Private
 export async function getProviderCount(req: express.Request, res: express.Response) {
-  const yearNum = Number.parseInt(req.params.year, 10);
-
-  const sqlQuery = `
-    SELECT COUNT(DISTINCT provider_licensing_id) AS unique_provider_count
-    FROM cusp_audit.demo.risk_scores
-    WHERE YEAR(CAST(StartOfMonth AS DATE)) = ${yearNum}
-  `;
+  const { text, namedParameters } = buildProviderCountQuery(req);
 
   try {
-    const data = await queryData(sqlQuery);
+    const data = await queryData(text, namedParameters);
     res.json(data[0]);
   }
   catch (err: any) {
@@ -277,183 +241,11 @@ export async function getProviderCount(req: express.Request, res: express.Respon
   }
 }
 
-//  TODO - clean up
-// @desc    Get provider overview data - overview data that will be displayed in FE dashboard cards
-// @route   put /api/v1/providerData/overview
-// @access  Private
 export async function getHighestRiskScore(req: express.Request, res: express.Response) {
-  const year1 = Number.parseInt(req.params.year, 10);
-  const year2 = year1 - 1;
-  // const sqlQuery = `
-  //   WITH combined AS (
-  //     SELECT
-  //       COALESCE(b.provider_licensing_id, p.provider_licensing_id, d.provider_licensing_id, s.provider_licensing_id) AS provider_licensing_id,
-  //       COALESCE(b.total_billed_over_capacity, 0) AS total_billed_over_capacity,
-  //       COALESCE(p.total_placed_over_capacity, 0) AS total_placed_over_capacity,
-  //       COALESCE(d.total_distance_traveled, 0) AS total_distance_traveled,
-  //       COALESCE(s.total_same_address, 0) AS total_same_address
-  //     FROM (
-  //       SELECT provider_licensing_id,
-  //         SUM(CASE WHEN billed_over_capacity_flag THEN 1 ELSE 0 END) AS total_billed_over_capacity    
-  //       FROM cusp_audit.demo.monthly_billed_over_capacity
-  //       WHERE YEAR(CAST(StartOfMonth AS DATE)) = ${yearNum}
-  //       GROUP BY provider_licensing_id
-  //     ) b
-  //     FULL OUTER JOIN (
-  //       SELECT provider_licensing_id, 
-  //         SUM(CASE WHEN placed_over_capacity_flag THEN 1 ELSE 0 END) AS total_placed_over_capacity    
-  //       FROM cusp_audit.demo.monthly_placed_over_capacity
-  //       WHERE YEAR(CAST(StartOfMonth AS DATE)) = ${yearNum}
-  //       GROUP BY provider_licensing_id
-  //     ) p
-  //       ON b.provider_licensing_id = p.provider_licensing_id
-  //     FULL OUTER JOIN (
-  //       SELECT provider_licensing_id, 
-  //         SUM(CASE WHEN distance_traveled_flag THEN 1 ELSE 0 END) AS total_distance_traveled   
-  //       FROM cusp_audit.demo.monthly_distance_traveled
-  //       WHERE YEAR(CAST(StartOfMonth AS DATE)) = ${yearNum}
-  //       GROUP BY provider_licensing_id
-  //     ) d
-  //       ON COALESCE(b.provider_licensing_id, p.provider_licensing_id) = d.provider_licensing_id
-  //     FULL OUTER JOIN (
-  //       SELECT provider_licensing_id, 
-  //         SUM(CASE WHEN same_address_flag THEN 1 ELSE 0 END) AS total_same_address      
-  //       FROM cusp_audit.demo.monthly_providers_with_same_address
-  //       WHERE YEAR(CAST(StartOfMonth AS DATE)) = ${yearNum}
-  //       GROUP BY provider_licensing_id
-  //     ) s
-  //       ON COALESCE(b.provider_licensing_id, p.provider_licensing_id, d.provider_licensing_id) = s.provider_licensing_id
-  //   ),
-  //   unpivoted AS (
-  //     SELECT 'total_billed_over_capacity' AS metric, SUM(total_billed_over_capacity) AS total_value FROM combined
-  //     UNION ALL
-  //     SELECT 'total_placed_over_capacity', SUM(total_placed_over_capacity) FROM combined
-  //     UNION ALL
-  //     SELECT 'total_distance_traveled', SUM(total_distance_traveled) FROM combined
-  //     UNION ALL
-  //     SELECT 'total_same_address', SUM(total_same_address) FROM combined
-  //   )
-  //   SELECT metric, total_value
-  //   FROM unpivoted
-  //   ORDER BY total_value DESC
-  //   LIMIT 1;
-  // `;
-
-const sqlQuery = `
-  WITH combined AS (
-    -- Year 1
-    SELECT
-      COALESCE(b.provider_licensing_id, p.provider_licensing_id, d.provider_licensing_id, s.provider_licensing_id) AS provider_licensing_id,
-      COALESCE(b.total_billed_over_capacity, 0) AS total_billed_over_capacity,
-      COALESCE(p.total_placed_over_capacity, 0) AS total_placed_over_capacity,
-      COALESCE(d.total_distance_traveled, 0) AS total_distance_traveled,
-      COALESCE(s.total_same_address, 0) AS total_same_address,
-      ${year1} AS year
-    FROM (
-      SELECT provider_licensing_id,
-        SUM(CASE WHEN billed_over_capacity_flag THEN 1 ELSE 0 END) AS total_billed_over_capacity    
-      FROM cusp_audit.demo.monthly_billed_over_capacity
-      WHERE YEAR(CAST(StartOfMonth AS DATE)) = ${year1}
-      GROUP BY provider_licensing_id
-    ) b
-    FULL OUTER JOIN (
-      SELECT provider_licensing_id, 
-        SUM(CASE WHEN placed_over_capacity_flag THEN 1 ELSE 0 END) AS total_placed_over_capacity    
-      FROM cusp_audit.demo.monthly_placed_over_capacity
-      WHERE YEAR(CAST(StartOfMonth AS DATE)) = ${year1}
-      GROUP BY provider_licensing_id
-    ) p
-      ON b.provider_licensing_id = p.provider_licensing_id
-    FULL OUTER JOIN (
-      SELECT provider_licensing_id, 
-        SUM(CASE WHEN distance_traveled_flag THEN 1 ELSE 0 END) AS total_distance_traveled   
-      FROM cusp_audit.demo.monthly_distance_traveled
-      WHERE YEAR(CAST(StartOfMonth AS DATE)) = ${year1}
-      GROUP BY provider_licensing_id
-    ) d
-      ON COALESCE(b.provider_licensing_id, p.provider_licensing_id) = d.provider_licensing_id
-    FULL OUTER JOIN (
-      SELECT provider_licensing_id, 
-        SUM(CASE WHEN same_address_flag THEN 1 ELSE 0 END) AS total_same_address      
-      FROM cusp_audit.demo.monthly_providers_with_same_address
-      WHERE YEAR(CAST(StartOfMonth AS DATE)) = ${year1}
-      GROUP BY provider_licensing_id
-    ) s
-      ON COALESCE(b.provider_licensing_id, p.provider_licensing_id, d.provider_licensing_id) = s.provider_licensing_id
-
-    UNION ALL
-
-    -- Year 2
-    SELECT
-      COALESCE(b.provider_licensing_id, p.provider_licensing_id, d.provider_licensing_id, s.provider_licensing_id) AS provider_licensing_id,
-      COALESCE(b.total_billed_over_capacity, 0) AS total_billed_over_capacity,
-      COALESCE(p.total_placed_over_capacity, 0) AS total_placed_over_capacity,
-      COALESCE(d.total_distance_traveled, 0) AS total_distance_traveled,
-      COALESCE(s.total_same_address, 0) AS total_same_address,
-      ${year2} AS year
-    FROM (
-      SELECT provider_licensing_id,
-        SUM(CASE WHEN billed_over_capacity_flag THEN 1 ELSE 0 END) AS total_billed_over_capacity    
-      FROM cusp_audit.demo.monthly_billed_over_capacity
-      WHERE YEAR(CAST(StartOfMonth AS DATE)) = ${year2}
-      GROUP BY provider_licensing_id
-    ) b
-    FULL OUTER JOIN (
-      SELECT provider_licensing_id, 
-        SUM(CASE WHEN placed_over_capacity_flag THEN 1 ELSE 0 END) AS total_placed_over_capacity    
-      FROM cusp_audit.demo.monthly_placed_over_capacity
-      WHERE YEAR(CAST(StartOfMonth AS DATE)) = ${year2}
-      GROUP BY provider_licensing_id
-    ) p
-      ON b.provider_licensing_id = p.provider_licensing_id
-    FULL OUTER JOIN (
-      SELECT provider_licensing_id, 
-        SUM(CASE WHEN distance_traveled_flag THEN 1 ELSE 0 END) AS total_distance_traveled   
-      FROM cusp_audit.demo.monthly_distance_traveled
-      WHERE YEAR(CAST(StartOfMonth AS DATE)) = ${year2}
-      GROUP BY provider_licensing_id
-    ) d
-      ON COALESCE(b.provider_licensing_id, p.provider_licensing_id) = d.provider_licensing_id
-    FULL OUTER JOIN (
-      SELECT provider_licensing_id, 
-        SUM(CASE WHEN same_address_flag THEN 1 ELSE 0 END) AS total_same_address      
-      FROM cusp_audit.demo.monthly_providers_with_same_address
-      WHERE YEAR(CAST(StartOfMonth AS DATE)) = ${year2}
-      GROUP BY provider_licensing_id
-    ) s
-      ON COALESCE(b.provider_licensing_id, p.provider_licensing_id, d.provider_licensing_id) = s.provider_licensing_id
-  ),
-
-  -- Aggregate each metric per year
-  unpivoted AS (
-    SELECT year, 'total_billed_over_capacity' AS metric, SUM(total_billed_over_capacity) AS total_value FROM combined GROUP BY year
-    UNION ALL
-    SELECT year, 'total_placed_over_capacity', SUM(total_placed_over_capacity) FROM combined GROUP BY year
-    UNION ALL
-    SELECT year, 'total_distance_traveled', SUM(total_distance_traveled) FROM combined GROUP BY year
-    UNION ALL
-    SELECT year, 'total_same_address', SUM(total_same_address) FROM combined GROUP BY year
-  )
-
-  -- Rank the metrics and return all top ties
-  SELECT year, metric, total_value
-  FROM (
-    SELECT
-      year,
-      metric,
-      total_value,
-      RANK() OVER (PARTITION BY year ORDER BY total_value DESC) AS rnk
-    FROM unpivoted
-  ) ranked
-  WHERE rnk = 1
-  ORDER BY year, metric;
-`;
-
-
+  const { text, namedParameters } = buildHighestRiskScoreQuery(req)
 
   try {
-
-    const data = await queryData(sqlQuery);
+    const data = await queryData(text, namedParameters );
     // console.log("highRiskScore data ====", data);
     res.json(data);
   }
@@ -463,69 +255,15 @@ const sqlQuery = `
   }
 }
 
-//  TODO - clean up
-// @desc    Get provider overview data - overview data that will be displayed in FE dashboard cards
-// @route   put /api/v1/providerData/overview
-// @access  Private
 export async function getProvidersWithHighRiskCount(req: express.Request, res: express.Response) {
-  const yearNum = Number.parseInt(req.params.year, 10);
+  const yearNum = Number.parseInt(req.params.date, 10);
   if (Number.isNaN(yearNum) || yearNum < 1980 || yearNum > 2100) {
     return res.status(400).json({ error: "Invalid year parameter" });
   }
-
-  const sqlQuery = `
-    WITH combined AS (
-      SELECT
-        COALESCE(b.provider_licensing_id, p.provider_licensing_id, d.provider_licensing_id, s.provider_licensing_id) AS provider_licensing_id,
-        COALESCE(b.total_billed_over_capacity, 0) AS total_billed_over_capacity,
-        COALESCE(p.total_placed_over_capacity, 0) AS total_placed_over_capacity,
-        COALESCE(d.total_distance_traveled, 0) AS total_distance_traveled,
-        COALESCE(s.total_same_address, 0) AS total_same_address,
-
-        COALESCE(b.total_billed_over_capacity, 0) +
-        COALESCE(p.total_placed_over_capacity, 0) +
-        COALESCE(d.total_distance_traveled, 0) +
-        COALESCE(s.total_same_address, 0) AS overall_risk_score
-      FROM (
-        SELECT provider_licensing_id,
-          SUM(CASE WHEN billed_over_capacity_flag THEN 1 ELSE 0 END) AS total_billed_over_capacity    
-        FROM cusp_audit.demo.monthly_billed_over_capacity
-        WHERE YEAR(CAST(StartOfMonth AS DATE)) = ${yearNum}
-        GROUP BY provider_licensing_id
-      ) b
-      FULL OUTER JOIN (
-        SELECT provider_licensing_id, 
-          SUM(CASE WHEN placed_over_capacity_flag THEN 1 ELSE 0 END) AS total_placed_over_capacity    
-        FROM cusp_audit.demo.monthly_placed_over_capacity
-        WHERE YEAR(CAST(StartOfMonth AS DATE)) = ${yearNum}
-        GROUP BY provider_licensing_id
-      ) p
-        ON b.provider_licensing_id = p.provider_licensing_id
-      FULL OUTER JOIN (
-        SELECT provider_licensing_id, 
-          SUM(CASE WHEN distance_traveled_flag THEN 1 ELSE 0 END) AS total_distance_traveled   
-        FROM cusp_audit.demo.monthly_distance_traveled
-        WHERE YEAR(CAST(StartOfMonth AS DATE)) = ${yearNum}
-        GROUP BY provider_licensing_id
-      ) d
-        ON COALESCE(b.provider_licensing_id, p.provider_licensing_id) = d.provider_licensing_id
-      FULL OUTER JOIN (
-        SELECT provider_licensing_id, 
-          SUM(CASE WHEN same_address_flag THEN 1 ELSE 0 END) AS total_same_address      
-        FROM cusp_audit.demo.monthly_providers_with_same_address
-        WHERE YEAR(CAST(StartOfMonth AS DATE)) = ${yearNum}
-        GROUP BY provider_licensing_id
-      ) s
-        ON COALESCE(b.provider_licensing_id, p.provider_licensing_id, d.provider_licensing_id) = s.provider_licensing_id
-    )
-    SELECT COUNT(*) AS count_over_44
-    FROM combined
-    WHERE overall_risk_score > 44;
-  `;
+  const { text, namedParameters } = buildHighRiskCountQuery(req)
 
   try {
-    const data = await queryData(sqlQuery);
-    console.log("providers count with high riskscore DATA----", data)
+    const data = await queryData(text, namedParameters);
     res.json(data[0]);
   }
   catch (err: any) {
@@ -533,22 +271,13 @@ export async function getProvidersWithHighRiskCount(req: express.Request, res: e
   }
 }
 
-//  TODO - clean up
-// @desc    Get provider overview data - overview data that will be displayed in FE dashboard cards
-// @route   put /api/v1/providerData/overview
-// @access  Private
 export async function getFlaggedCount(req: express.Request, res: express.Response) {
   // const yearNum = Number.parseInt(req.params.year, 10);
 
-  const sqlQuery = `
-    SELECT COUNT(DISTINCT provider_uid) AS flagged_provider_count
-    FROM cusp_audit.demo.risk_providers a WHERE EXISTS (
-      SELECT 1 FROM cusp_audit.demo.provider_insights b WHERE b.provider_licensing_id = a.provider_licensing_id AND b.is_flagged = 'true'
-    )
-  `;
+  const {text} = buildFlaggedCountQuery();
 
   try {
-    const data = await queryData(sqlQuery);
+    const data = await queryData(text);
     res.json(data[0]);
   }
   catch (err: any) {
@@ -557,24 +286,14 @@ export async function getFlaggedCount(req: express.Request, res: express.Respons
   }
 }
 
-
 export async function getProviderAnnualData(req: express.Request, res: express.Response) {
-  const yearNum = Number.parseInt(req.params.year, 10);
+  const filters = parseProviderFilters(req);
 
-  const offset = req.query.offset || "0";
-  const isFlagged = req.query.flagStatus === "true";
-  const isUnflagged = req.query.flagStatus === "false";
-  const flagged = checkedFilter({ flagged: isFlagged, unflagged: isUnflagged });
+  const { text, namedParameters } = buildProviderYearlyQuery({
+    ...filters,
+  });
 
-  const cities: string[] = Array.isArray(req.query.cities)
-    ? req.query.cities.map(String)
-    : req.query.cities
-      ? [String(req.query.cities)]
-      : [];
-
-  const { text, namedParameters } = buildProviderYearlyQuery({ offset: String(offset), year: String(yearNum), isFlagged: flagged, cities });
-
-  if (Number.isNaN(yearNum) || yearNum < 1980 || yearNum > 2100) {
+  if (Number.isNaN(Number(filters.year)) || Number(filters.year) < 1980 || Number(filters.year) > 2100) {
     return res.status(400).json({ error: "Invalid year parameter" });
   }
 
@@ -594,6 +313,9 @@ export async function getProviderAnnualData(req: express.Request, res: express.R
         postalAddress: item?.postal_address || "--",
         city: item?.city || "--",
         zip: item?.zip || "--",
+        capacityLicensed: item?.capacity_licensed || "--",
+        providerFacilityType: item?.provider_facility_type || "--",
+        providerStatus: item?.provider_status || "--",
       };
     });
 
@@ -603,51 +325,18 @@ export async function getProviderAnnualData(req: express.Request, res: express.R
     res.status(500).json({ error: err.message });
   }
 }
-// TODO: add Index on city then add SORT BY then remove JS sort here
-export async function getProviderCities(req: express.Request, res: express.Response) {
-  const cityName = req.query?.cityName as string || "";
-  const namedParameters = {
-    iLikeCity: `%${cityName}%`,
-  };
 
-  const sql = SQL`SELECT DISTINCT city
-  FROM
-  cusp_audit.fake_data.addresses
-  WHERE 1=1
-  `;
-  if (cityName.length > 0) {
-    sql.append(SQL` AND city ILIKE :iLikeCity`);
-  }
+export async function getLicenseCapacity(req: express.Request, res: express.Response) {
+  const filters = parseProviderFilters(req);
 
-  sql.append(SQL` LIMIT 100`);
+  const sql = filters?.month
+    ? { text: "", namedParameters: { month: filters.month } }
+    : buildProviderYearlyFacetQuery("licenseCapacity", { year: filters.year, flagStatus: filters.flagStatus, cities: filters.cities });
 
-// TODO - I think this can be simplified into this 
-// try {
-//   interface CityRecord {
-//     city: string;
-//     [key: string]: unknown;
-//   }
-
-//   const rawData = await queryData<CityRecord[]>(sql.text, namedParameters);
-
-//   const sortedCities = rawData
-//     .filter((item): item is CityRecord => typeof item.city === 'string')
-//     .sort((a, b) => a.city.localeCompare(b.city))
-//     .map(item => item.city);
-
-//   res.json(sortedCities);
-// } catch (err) {
-//   console.error(err);
-//   res.status(500).json({ error: 'Failed to fetch data' });
-// }
   try {
-    // const rawData = await queryData(sql.text, namedParameters);
-    const rawData = (await queryData(sql.text, namedParameters)) as { city: string }[];
+    const rawData = await queryData(sql.text, sql.namedParameters) as { min_value: number | null; max_value: number | null }[];
 
-    res.json(rawData.sort(({ city: cityA }, { city: cityB }) => cityA.localeCompare(cityB)).reduce<string[]>((acc, curr) => {
-      acc.push(curr.city);
-      return acc;
-    }, []));
+    res.json(rawData[0] ?? { min_value: null, max_value: null });
   }
   catch (err: any) {
     res.status(500).json({ error: err.message });
@@ -655,23 +344,8 @@ export async function getProviderCities(req: express.Request, res: express.Respo
 }
 
 export async function getProviderMonthData(req: express.Request, res: express.Response) {
-  // TODO: verify this here
-  const month = req.params.month;
-  const offset = req.query.offset || "0";
-  const isFlagged = req.query.flagStatus === "true";
-  const isUnflagged = req.query.flagStatus === "false";
-
-  const cities: string[] = Array.isArray(req.query.cities)
-    ? req.query.cities.map(String)
-    : req.query.cities
-      ? [String(req.query.cities)]
-      : [];
-
-  // we need to extract the values for city from the req.query then pass them to the build function
-  // update the build function to include the multi value where clause
-  const flagged = checkedFilter({ flagged: isFlagged, unflagged: isUnflagged });
-
-  const { text, namedParameters } = buildProviderMonthlyQuery({ offset: String(offset), month, isFlagged: flagged, cities });
+  const filters = parseProviderFilters(req);
+  const { text, namedParameters } = buildProviderMonthlyQuery({ offset: filters.offset, month: filters.month!, flagStatus: filters.flagStatus, cities: filters.cities });
 
   try {
     const rawData = await queryData(text, namedParameters) as MonthlyProviderData[];
@@ -700,12 +374,34 @@ export async function getProviderMonthData(req: express.Request, res: express.Re
   }
 }
 
+// TODO: add Index on city then add SORT BY then remove JS sort here
+export async function getProviderCities(req: express.Request, res: express.Response) {
+  const filters = parseProviderFilters(req);
+
+  const sql = filters.month
+    ? { text: "", namedParameters: { month: filters.month } }
+    : buildProviderYearlyFacetQuery("cities", { year: filters.year!, flagStatus: filters.flagStatus, cities: [], licenseCapacity: filters.licenseCapacity }, filters.cityName, true);
+
+  try {
+    const rawData = (await queryData(sql.text, sql.namedParameters)) as {
+      option_value: any;
+      city: string;
+    }[];
+    const parsed = rawData.map(item => item.option_value);
+
+    res.json(parsed);
+  }
+  catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+}
+
 export async function getProviderDetails(req: express.Request, res: express.Response) {
   const provider_licensing_id = req.params.providerId;
   const { text, namedParameters } = buildProviderDetailsQuery({ provider_licensing_id });
 
   try {
-    const rawData = await queryData(text, namedParameters) as ProviderDetailsData[]
+    const rawData = await queryData(text, namedParameters) as ProviderDetailsData[];
     const result: UiProviderDetailsData[] = rawData.map((item) => {
       return {
         providerLicensingId: item.provider_licensing_id,
@@ -716,7 +412,7 @@ export async function getProviderDetails(req: express.Request, res: express.Resp
         providerPhone: item.provider_phone || "--",
         providerEmail: item.provider_email || "--",
         providerStatus: item.provider_status || "--",
-        providerType: item.provider_type || "--"
+        providerType: item.provider_type || "--",
       };
     });
     res.json(result[0]);
@@ -725,86 +421,3 @@ export async function getProviderDetails(req: express.Request, res: express.Resp
     res.status(500).json({ error: err.message });
   }
 }
-
-// async function getProviderAnnualDataUtility(yearNum: number) {
-//   if (Number.isNaN(yearNum) || yearNum < 1980 || yearNum > 2100) {
-//     // return res.status(400).json({ error: "Invalid year parameter" });
-//   }
-
-//   const sqlQuery = `
-//     WITH combined AS (
-//       SELECT
-//         COALESCE(b.provider_licensing_id, p.provider_licensing_id, d.provider_licensing_id, s.provider_licensing_id) AS provider_licensing_id,
-//         COALESCE(b.total_billed_over_capacity, 0) AS total_billed_over_capacity,
-//         COALESCE(p.total_placed_over_capacity, 0) AS total_placed_over_capacity,
-//         COALESCE(d.total_distance_traveled, 0) AS total_distance_traveled,
-//         COALESCE(s.total_same_address, 0) AS total_same_address,
-
-//         COALESCE(b.total_billed_over_capacity, 0) +
-//         COALESCE(p.total_placed_over_capacity, 0) +
-//         COALESCE(d.total_distance_traveled, 0) +
-//         COALESCE(s.total_same_address, 0) AS overall_risk_score
-//       FROM (
-//         SELECT provider_licensing_id,
-//           SUM(CASE WHEN billed_over_capacity_flag THEN 1 ELSE 0 END) AS total_billed_over_capacity
-//         FROM cusp_audit.demo.monthly_billed_over_capacity
-//         WHERE YEAR(CAST(StartOfMonth AS DATE)) = ${yearNum}
-//         GROUP BY provider_licensing_id
-//       ) b
-//       FULL OUTER JOIN (
-//         SELECT provider_licensing_id,
-//           SUM(CASE WHEN placed_over_capacity_flag THEN 1 ELSE 0 END) AS total_placed_over_capacity
-//         FROM cusp_audit.demo.monthly_placed_over_capacity
-//         WHERE YEAR(CAST(StartOfMonth AS DATE)) = ${yearNum}
-//         GROUP BY provider_licensing_id
-//       ) p
-//         ON b.provider_licensing_id = p.provider_licensing_id
-//       FULL OUTER JOIN (
-//         SELECT provider_licensing_id,
-//           SUM(CASE WHEN distance_traveled_flag THEN 1 ELSE 0 END) AS total_distance_traveled
-//         FROM cusp_audit.demo.monthly_distance_traveled
-//         WHERE YEAR(CAST(StartOfMonth AS DATE)) = ${yearNum}
-//         GROUP BY provider_licensing_id
-//       ) d
-//         ON COALESCE(b.provider_licensing_id, p.provider_licensing_id) = d.provider_licensing_id
-//       FULL OUTER JOIN (
-//         SELECT provider_licensing_id,
-//           SUM(CASE WHEN same_address_flag THEN 1 ELSE 0 END) AS total_same_address
-//         FROM cusp_audit.demo.monthly_providers_with_same_address
-//         WHERE YEAR(CAST(StartOfMonth AS DATE)) = ${yearNum}
-//         GROUP BY provider_licensing_id
-//       ) s
-//         ON COALESCE(b.provider_licensing_id, p.provider_licensing_id, d.provider_licensing_id) = s.provider_licensing_id
-//     )
-//     SELECT
-//       c.provider_licensing_id,
-//       pa.provider_name,
-//       c.total_billed_over_capacity,
-//       c.total_placed_over_capacity,
-//       c.total_distance_traveled,
-//       c.total_same_address,
-//       c.overall_risk_score
-//     FROM combined c
-//     LEFT JOIN cusp_audit.demo.provider_attributes pa
-//       ON c.provider_licensing_id = pa.provider_licensing_id
-//     ORDER BY c.provider_licensing_id;
-//   `;
-
-//   try {
-//     const rawData = await queryData(sqlQuery);
-//     const result: UiAnnualProviderData[] = rawData.map((item) => {
-//       return {
-//         provider_licensing_id: item.provider_licensing_id,
-//         provider_name: item.provider_name ? item.provider_name : "--",
-//         total_billed_over_capacity: item.total_billed_over_capacity || 0,
-//         total_placed_over_capacity: item.total_placed_over_capacity || 0,
-//         total_distance_traveled: item.total_distance_traveled || 0,
-//         total_same_address: item.total_same_address || 0,
-//         overall_risk_score: item.overall_risk_score || 0,
-//       };
-//     });
-//   }
-//   catch (err: any) {
-//     // res.status(500).json({ error: err.message });
-//   }
-// }

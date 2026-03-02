@@ -3,17 +3,17 @@
 
 import type express from "express";
 
-import { queryData } from "../services/queryService.js";
+import { queryData } from "../config/databricks.js";
 
 // @access  Private
 export async function updateProviderDataInsights(req: express.Request, res: express.Response) {
   // const body = req.body;
   const { actionType } = req?.body;
-  let sqlQuery = ""
-  let historicalQuery = ""
+  let sqlQuery = "";
+  let historicalQuery = "";
 
-  if (actionType === 'CREATE') {
-    const { provider_licensing_id, is_flagged, comment, created_at } = req.body
+  if (actionType === "CREATE") {
+    const { provider_licensing_id, is_flagged, comment, created_at } = req.body;
     sqlQuery = `
       MERGE INTO cusp_audit.demo.provider_insights AS target
       USING (
@@ -51,11 +51,11 @@ export async function updateProviderDataInsights(req: express.Request, res: expr
         is_flagged
       FROM cusp_audit.demo.provider_insights
       WHERE provider_licensing_id = '${provider_licensing_id}';
-    `
+    `;
   }
 
-  if (actionType === 'UPDATE') {
-    const { provider_licensing_id, comment, created_at } = req.body
+  if (actionType === "UPDATE") {
+    const { provider_licensing_id, comment, created_at } = req.body;
     sqlQuery = `
     MERGE INTO cusp_audit.demo.provider_insights AS target
       USING (
@@ -86,11 +86,11 @@ export async function updateProviderDataInsights(req: express.Request, res: expr
         is_flagged
       FROM cusp_audit.demo.provider_insights
       WHERE provider_licensing_id = '${provider_licensing_id}';
-      `
+      `;
   }
 
-   if (actionType === 'RESOLVE') {
-     const { provider_licensing_id, is_flagged, comment, resolved_on } = req.body
+  if (actionType === "RESOLVE") {
+    const { provider_licensing_id, is_flagged, comment, resolved_on } = req.body;
     sqlQuery = `
       MERGE INTO cusp_audit.demo.provider_insights AS target
       USING (
@@ -106,7 +106,7 @@ export async function updateProviderDataInsights(req: express.Request, res: expr
           target.comment = '',
           target.resolved_on = null`;
 
-      historicalQuery = `
+    historicalQuery = `
       INSERT INTO cusp_audit.demo.provider_insights_history (
         provider_insight_id,
         created_at,
@@ -124,7 +124,7 @@ export async function updateProviderDataInsights(req: express.Request, res: expr
         is_flagged
       FROM cusp_audit.demo.provider_insights
       WHERE provider_licensing_id = '${provider_licensing_id}';
-      `
+      `;
   }
 
   // update & create
@@ -147,7 +147,7 @@ export async function updateProviderDataInsights(req: express.Request, res: expr
 }
 
 export async function getProviderDataInsights(req: express.Request, res: express.Response) {
-  const provider_id = req.params.providerId
+  const provider_id = req.params.providerId;
   const sqlQuery = `
   SELECT
     p.provider_licensing_id,
@@ -178,8 +178,9 @@ export async function getProviderDataInsights(req: express.Request, res: express
   try {
     const data = await queryData(sqlQuery);
     if (data?.length === 1) {
-      res.json(data[0])
-    } else {
+      res.json(data[0]);
+    }
+    else {
       res.json(data);
     }
   }

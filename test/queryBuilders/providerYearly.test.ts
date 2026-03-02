@@ -7,7 +7,7 @@ import { buildProviderYearlyQuery } from "../../src/queryBuilders/providerYearly
 describe("buildProviderYearlyQuery", () => {
   it("should return a valid SQL query with named parameters", () => {
     const params: BuildProviderYearlyQueryParams = {
-      isFlagged: true,
+      flagStatus: true,
       year: "2023",
       offset: "0",
       cities: ["New York", "Los Angeles"],
@@ -20,7 +20,7 @@ describe("buildProviderYearlyQuery", () => {
     expect(result.namedParameters).toEqual({
       year: "2023",
       offset: 0,
-      isFlagged: true,
+      flagStatus: true,
       cities: "New York,Los Angeles",
     });
   });

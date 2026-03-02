@@ -1,11 +1,11 @@
 import type express from "express";
 
+import { queryData } from "../config/databricks.js";
 import { buildBilledOverCapacityQuery } from "../queryBuilders/scenarioQueries/billedOverCapacity.js";
 import { buildScenarioDistancTraveledQuery } from "../queryBuilders/scenarioQueries/distanceTraveled.js";
 import { buildOverallScoreQuery } from "../queryBuilders/scenarioQueries/overallScore.js";
 import { buildPlacedOverCapacityQuery } from "../queryBuilders/scenarioQueries/placedOverCapacity.js";
 import { buildScenarioSameAddressQuery } from "../queryBuilders/scenarioQueries/sameAddress.js";
-import { queryData } from "../services/queryService.js";
 
 export type ScenarioPlacedOverData = {
   StartOfMonth: string; // ISO DateString
@@ -132,8 +132,8 @@ export function reducePlacedOverWeeks(weeks?: PlacedOverWeek[]): Pick<UiScenario
   const averageWeeklyPlacements = (weeks?.reduce((total, current) => (total += current.child_placements), 0)) || 0 / (weeks?.length || 0);
   return {
     aveWklyPlacements: averageWeeklyPlacements,
-    openTime: (weeks?.[0]?.hours_open) || '--',
-    closeTime: (weeks?.[0]?.hours_close) || '--',
+    openTime: (weeks?.[0]?.hours_open) || "--",
+    closeTime: (weeks?.[0]?.hours_close) || "--",
   };
 }
 
@@ -197,8 +197,8 @@ export function reduceBilledOverWeeks(weeks?: BilledOverWeek[]): Pick<UiScenario
   const averageWeeklyPlacements = ((weeks?.reduce((total, current) => (total += current.billed_child_placements), 0)) || 0) / (weeks?.length || 0);
   return {
     aveWklyPlacements: averageWeeklyPlacements,
-    openTime: (weeks?.[0]?.hours_open) || '--',
-    closeTime: (weeks?.[0]?.hours_close) || '--',
+    openTime: (weeks?.[0]?.hours_open) || "--",
+    closeTime: (weeks?.[0]?.hours_close) || "--",
   };
 }
 
@@ -328,14 +328,14 @@ export async function sameAddressById(req: express.Request, res: express.Respons
   }
 }
 
-function reduceDistanceWeeks(weeks:DistanceTraveledScenarioWeek[]) {
-  const monthlyTotal = weeks.reduce((total, week)=> {
-    return total +=week.average_distance_miles
-  }, 0)
+function reduceDistanceWeeks(weeks: DistanceTraveledScenarioWeek[]) {
+  const monthlyTotal = weeks.reduce((total, week) => {
+    return total += week.average_distance_miles;
+  }, 0);
 
   return {
-    aveDistance: monthlyTotal / weeks.length
-  }
+    aveDistance: monthlyTotal / weeks.length,
+  };
 }
 
 export function parseDistanceWeeks(week: DistanceTraveledScenarioWeek[]): UiDistanceTraveledScenarioSubRow[] {
@@ -359,7 +359,7 @@ export async function distanceTraveledById(req: express.Request, res: express.Re
     // we should parse, top level needs open/close times
 
     const result: UiDistanceTraveledScenarioMainRow[] = rawData.map((item) => {
-      const monthlyAverage = reduceDistanceWeeks(item.subRows)
+      const monthlyAverage = reduceDistanceWeeks(item.subRows);
       // handle convert from domain model to ui model
       const subRows = parseDistanceWeeks(item.subRows);
       return {

@@ -1,35 +1,5 @@
-// const { connect } = require('@databricks/sql');
+import type { ExecuteStatementOptions } from "@databricks/sql/dist/contracts/IDBSQLSession.js";
 
-// const connection = connect({
-//   serverHostname: process.env.DATABRICKS_HOST,
-//   httpPath: process.env.DATABRICKS_HTTP_PATH,
-//   accessToken: process.env.PAT_TOKEN,
-// });
-
-// module.exports = connection;
-
-//  end OLD 
-// import { DBSQLClient } from "@databricks/sql";
-
-// import { env } from "../env.js";
-
-// const client = new DBSQLClient();
-
-// export async function connectToDatabricks() {
-//   // console.log({
-//   //   host: process.env.DATABRICKS_HOST || "",
-//   //   path: process.env.DATABRICKS_HTTP_PATH || "",
-//   //   token: process.env.PAT_TOKEN || "",
-//   // });
-//   await client.connect({
-//     host: env.DATABRICKS_HOST || "",
-//     path: env.DATABRICKS_HTTP_PATH || "",
-//     token: env.PAT_TOKEN || "",
-//   });
-
-//   return client;
-// }
-// start new
 import { DBSQLClient } from "@databricks/sql";
 
 import { env } from "../env.js";
@@ -49,6 +19,23 @@ export async function getDatabricksClient(): Promise<DBSQLClient> {
   return client;
 }
 
+export async function queryData(
+  sql: string,
+  namedParameters?: ExecuteStatementOptions["namedParameters"],
+) {
+  const client = await getDatabricksClient();
+  const session = await client.openSession();
+  try {
+    const operation = await session.executeStatement(sql, { namedParameters });
+    const result = await operation.fetchAll();
+    await operation.close();
+    return result;
+  }
+  finally {
+    await session.close().catch(() => {});
+  }
+};
+
 export function resetClient() {
-  client = null
+  client = null;
 }

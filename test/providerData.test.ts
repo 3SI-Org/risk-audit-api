@@ -18,6 +18,7 @@ const mockGetProviderDataInsights = vi.hoisted(() => vi.fn());
 const mockGetProviderMonthData = vi.hoisted(() => vi.fn());
 const mockGetProviderDetails = vi.hoisted(() => vi.fn());
 const mockAuthenticateJWT = vi.hoisted(() => vi.fn());
+const mockGetLicenseCapacity = vi.hoisted(() => vi.fn());
 
 vi.mock("../src/services/queryService.js", () => ({
   queryData: mockQueryData,
@@ -34,6 +35,7 @@ vi.mock("../src/controllers/providerData.js", () => ({
   getProviderAnnualData: mockGetProviderAnnualData,
   getProviderMonthData: mockGetProviderMonthData,
   getProviderDetails: mockGetProviderDetails,
+  getLicenseCapacity: mockGetLicenseCapacity,
 }));
 
 vi.mock("../src/controllers/providerInsights.js", () => ({
@@ -57,30 +59,6 @@ describe("providerData routes", () => {
     mockAuthenticateJWT.mockImplementation((req, res, next) => next());
   });
 
-  describe("GET /api/v1/providerData/", () => {
-    it("should return demo data", async () => {
-      const mockData = [{ id: 1, name: "Test" }];
-      mockQueryData.mockResolvedValue(mockData);
-
-      const response = await request(app)
-        .get("/api/v1/providerData/")
-        .expect(200);
-
-      expect(response.body).toEqual(mockData);
-      expect(mockQueryData).toHaveBeenCalledWith("select * from cusp_audit.demo limit 10");
-    });
-
-    it("should handle query errors", async () => {
-      mockQueryData.mockRejectedValue(new Error("Database error"));
-
-      const response = await request(app)
-        .get("/api/v1/providerData/")
-        .expect(500);
-
-      expect(response.body).toEqual({ error: "Database error" });
-    });
-  });
-
   describe("GET /api/v1/providerData/cities", () => {
     it("should call getProviderCities with authentication", async () => {
       mockGetProviderCities.mockImplementation((req, res) => {
@@ -88,7 +66,7 @@ describe("providerData routes", () => {
       });
 
       await request(app)
-        .get("/api/v1/providerData/cities")
+        .get("/api/v1/providerData/cities/2024")
         .expect(200);
 
       expect(mockAuthenticateJWT).toHaveBeenCalled();

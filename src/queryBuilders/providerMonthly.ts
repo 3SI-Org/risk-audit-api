@@ -1,7 +1,7 @@
 import SQL from "sql-template-strings";
 
 type BuildProviderMonthlyQueryParams = {
-  isFlagged: boolean | null;
+  flagStatus: boolean | null;
   month: string;
   offset: string;
   cities: string[];
@@ -26,13 +26,13 @@ export function parseMonthParam(monthParam: string) {
 
 export function parseOffsetParam(offsetParam: string): number {
   if (typeof offsetParam === "string") {
-    const parsed = Number.parseInt(offsetParam, 10);
+    const parsed = Number(offsetParam);
     return Number.isNaN(parsed) || parsed < 0 ? 0 : parsed;
   }
   return 0;
 }
 
-export function buildProviderMonthlyQuery({ month, offset, isFlagged, cities }: BuildProviderMonthlyQueryParams) {
+export function buildProviderMonthlyQuery({ month, offset, flagStatus, cities }: BuildProviderMonthlyQueryParams) {
 
   const query= SQL`
   SELECT
@@ -70,12 +70,12 @@ export function buildProviderMonthlyQuery({ month, offset, isFlagged, cities }: 
   LEFT JOIN cusp_audit.fake_data.addresses a ON rp.provider_address_uid = a.provider_address_uid
   WHERE 1=1`;
 
-  if (isFlagged !== null && isFlagged !== false) {
-    query.append(SQL` AND pi.is_flagged = :isFlagged`);
+  if (flagStatus !== null && flagStatus !== false) {
+    query.append(SQL` AND pi.is_flagged = :flagStatus`);
   }
   // get records that have not been flagged prior, then unflagged
-  if (isFlagged === false) {
-    query.append(SQL` AND (pi.is_flagged IS NULL OR pi.is_flagged = :isFlagged)`);
+  if (flagStatus === false) {
+    query.append(SQL` AND (pi.is_flagged IS NULL OR pi.is_flagged = :flagStatus)`);
   }
 
   if (cities.length > 0) {
@@ -90,7 +90,7 @@ export function buildProviderMonthlyQuery({ month, offset, isFlagged, cities }: 
   const namedParameters = {
     month: parseMonthParam(month),
     offset: parseOffsetParam(offset),
-    ...(isFlagged !== null ? { isFlagged } : {}),
+    ...(flagStatus !== null ? { flagStatus } : {}),
     ...(cities.length > 0 ? { cities: cities.join(",") } : {})
   };
 
