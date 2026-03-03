@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { buildProviderDetailsQuery } from "../../src/queryBuilders/providerDetails.js";
+import { buildProviderDetailsQuery } from "../../src/queryBuilders/providers/details.js";
 import { normalizeSQL } from "../../src/utils.js";
 
 describe("buildProviderDetailsQuery", () => {

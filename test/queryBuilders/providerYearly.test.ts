@@ -1,12 +1,12 @@
 import { describe, expect, it } from "vitest";
 
-import type { BuildProviderYearlyQueryParams } from "../../src/queryBuilders/providerYearly.js";
+import type { ProviderFilters } from "../../src/controllers/providerFilters.js";
 
-import { buildProviderYearlyQuery } from "../../src/queryBuilders/providerYearly.js";
+import { buildProviderYearlyQuery } from "../../src/queryBuilders/providers/yearly.js";
 
 describe("buildProviderYearlyQuery", () => {
   it("should return a valid SQL query with named parameters", () => {
-    const params: BuildProviderYearlyQueryParams = {
+    const params: ProviderFilters = {
       flagStatus: true,
       year: "2023",
       offset: "0",

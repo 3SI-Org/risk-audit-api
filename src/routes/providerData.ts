@@ -1,8 +1,11 @@
-
 import { Router } from "express";
 
-import { exportProviderDataMonthly, exportProviderDataYearly, getFlaggedCount, getHighestRiskScore, getLicenseCapacity, getProviderAnnualData, getProviderCities, getProviderCount, getProviderDetails, getProviderMonthData, getProvidersWithHighRiskCount } from "../controllers/providerData.js";
+import { getLicenseCapacity, getProviderCities } from "../controllers/providerFilters.js";
 import { getProviderDataInsights, updateProviderDataInsights } from "../controllers/providerInsights.js";
+import { getProviderDetails } from "../controllers/providers/details.js";
+import { exportProviderDataMonthly, getProviderMonthData } from "../controllers/providers/monthly.js";
+import { getFlaggedCount, getHighestRiskScore, getProviderCount, getProvidersWithHighRiskCount } from "../controllers/providers/overview.js";
+import { exportProviderDataYearly, getProviderAnnualData } from "../controllers/providers/yearly.js";
 import { authenticateJWT } from "../middlewares.js";
 
 const router = Router();
@@ -32,7 +35,7 @@ router.route("/annual/:date")
   .get(authenticateJWT, getProviderAnnualData);
 
 router.route("/insights/:providerId")
-  .put(authenticateJWT,updateProviderDataInsights)
+  .put(authenticateJWT, updateProviderDataInsights)
   .get(authenticateJWT, getProviderDataInsights);
 
 router.route("/month/:date")
@@ -46,6 +49,5 @@ router.route("/:providerId")
     authenticateJWT,
     getProviderDetails,
   );
-
 
 export default router;

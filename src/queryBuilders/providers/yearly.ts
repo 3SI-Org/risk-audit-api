@@ -1,17 +1,12 @@
 import { SQL } from "sql-template-strings";
 
-import { parseOffsetParam } from "./providerMonthly.js";
+import type { ProviderFilters } from "../../controllers/providerFilters.js";
 
-export type BuildProviderYearlyQueryParams = {
-  flagStatus?: boolean | null;
-  year: string;
-  offset?: string;
-  cities: string[];
-  licenseCapacity?: string;
-};
+import { parseOffsetParam } from "./monthly.js";
 
 function parseRange(value?: string | undefined): { min: number | null; max: number | null } {
-  if (!value) return { min: null, max: null };
+  if (!value)
+    return { min: null, max: null };
   const [minStr, maxStr] = value.split(",");
   return {
     min: minStr?.trim() ? Number(minStr) : null,
@@ -21,19 +16,19 @@ function parseRange(value?: string | undefined): { min: number | null; max: numb
 
 type FilterConfig = {
   name: string;
-  selectExpr: string;        // what to SELECT DISTINCT for facet
-  nullFilter: string; 
-  searchable: boolean;        // exclude nulls from facet results
+  selectExpr: string; // what to SELECT DISTINCT for facet
+  nullFilter: string;
+  searchable: boolean; // exclude nulls from facet results
   facetType?: "distinct" | "range"; // default "distinct"
   applyWhere: (
     sqlQuery: any,
-    params: BuildProviderYearlyQueryParams
+    params: ProviderFilters
   ) => void;
   applyParams: (
-    params: BuildProviderYearlyQueryParams,
+    params: ProviderFilters,
     named: Record<string, any>
   ) => void;
-  isActive: (params: BuildProviderYearlyQueryParams) => boolean;
+  isActive: (params: ProviderFilters) => boolean;
 };
 
 const FILTERS: FilterConfig[] = [
@@ -51,9 +46,10 @@ const FILTERS: FilterConfig[] = [
       }
     },
     applyParams: (params, named) => {
-      if (params.flagStatus !== null) named.flagStatus = params.flagStatus;
+      if (params.flagStatus !== null)
+        named.flagStatus = params.flagStatus;
     },
-    isActive: (params) => params.flagStatus !== null,
+    isActive: params => params.flagStatus !== null,
   },
   {
     name: "cities",
@@ -61,40 +57,43 @@ const FILTERS: FilterConfig[] = [
     nullFilter: "AND a.city IS NOT NULL",
     searchable: true,
     applyWhere: (sql, params) => {
-      if (params.cities.length > 0) {
+      if (params.cities && params?.cities?.length > 0) {
         sql.append(SQL` AND ARRAY_CONTAINS(TRANSFORM(SPLIT(:cities, ','), s -> TRIM(s)), a.city)`);
       }
     },
     applyParams: (params, named) => {
-      if (params.cities.length > 0) named.cities = params.cities.join(",");
+      if (params.cities && params.cities.length > 0)
+        named.cities = params.cities.join(",");
     },
-    isActive: (params) => params.cities.length > 0,
+    isActive: params => (params.cities && params.cities.length > 0) === true,
   },
   {
-  name: "licenseCapacity",
-  selectExpr: "c.capacity_licensed",
-  nullFilter: "AND c.capacity_licensed IS NOT NULL",
-  searchable: false,
-  facetType: "range",
-  applyWhere: (sql, params) => {
-    const { min, max } = parseRange(params.licenseCapacity);
-    if (min !== null) {
-      sql.append(SQL` AND c.capacity_licensed >= :capacityMin`);
-    }
-    if (max !== null) {
-      sql.append(SQL` AND c.capacity_licensed <= :capacityMax`);
-    }
+    name: "licenseCapacity",
+    selectExpr: "c.capacity_licensed",
+    nullFilter: "AND c.capacity_licensed IS NOT NULL",
+    searchable: false,
+    facetType: "range",
+    applyWhere: (sql, params) => {
+      const { min, max } = parseRange(params.licenseCapacity);
+      if (min !== null) {
+        sql.append(SQL` AND c.capacity_licensed >= :capacityMin`);
+      }
+      if (max !== null) {
+        sql.append(SQL` AND c.capacity_licensed <= :capacityMax`);
+      }
+    },
+    applyParams: (params, named) => {
+      const { min, max } = parseRange(params.licenseCapacity);
+      if (min !== null)
+        named.capacityMin = min;
+      if (max !== null)
+        named.capacityMax = max;
+    },
+    isActive: (params) => {
+      const { min, max } = parseRange(params.licenseCapacity);
+      return min !== null || max !== null;
+    },
   },
-  applyParams: (params, named) => {
-    const { min, max } = parseRange(params.licenseCapacity);
-    if (min !== null) named.capacityMin = min;
-    if (max !== null) named.capacityMax = max;
-  },
-  isActive: (params) => {
-    const { min, max } = parseRange(params.licenseCapacity);
-    return min !== null || max !== null;
-  },
-},
   // ---- add new filters here ----
   // {
   //   name: "zipCodes",
@@ -105,7 +104,6 @@ const FILTERS: FilterConfig[] = [
   //   isActive: (params) => params.zipCodes.length > 0,
   // },
 ];
-
 
 function appendBaseCTE(sqlQuery: any) {
   sqlQuery.append(SQL`
@@ -167,7 +165,7 @@ function appendJoins(sqlQuery: any) {
     WHERE 1=1`);
 }
 
-export function buildProviderYearlyQuery(params: BuildProviderYearlyQueryParams) {
+export function buildProviderYearlyQuery(params: ProviderFilters) {
   const sqlQuery = SQL``;
   appendBaseCTE(sqlQuery);
 
@@ -207,12 +205,13 @@ export function buildProviderYearlyQuery(params: BuildProviderYearlyQueryParams)
 
 export function buildProviderYearlyFacetQuery(
   target: string,
-  params: Partial<Omit<BuildProviderYearlyQueryParams, "offset">> & { year: string },
+  params: Partial<Omit<ProviderFilters, "offset">> & { year: string },
   search?: string,
-  limit?: boolean
+  limit?: boolean,
 ) {
-  const filter = FILTERS.find((f) => f.name === target);
-  if (!filter) throw new Error(`Unknown filter: ${target}`);
+  const filter = FILTERS.find(f => f.name === target);
+  if (!filter)
+    throw new Error(`Unknown filter: ${target}`);
 
   const sqlQuery = SQL``;
   appendBaseCTE(sqlQuery);
@@ -220,7 +219,8 @@ export function buildProviderYearlyFacetQuery(
   // Select based on facet type
   if (filter.facetType === "range") {
     sqlQuery.append(` SELECT MIN(${filter.selectExpr}) AS min_value, MAX(${filter.selectExpr}) AS max_value`);
-  } else {
+  }
+  else {
     sqlQuery.append(` SELECT DISTINCT ${filter.selectExpr} AS option_value`);
   }
 
@@ -228,7 +228,8 @@ export function buildProviderYearlyFacetQuery(
 
   const namedParameters: Record<string, any> = { year: params.year };
   for (const f of FILTERS) {
-    if (f.name === target) continue;
+    if (f.name === target)
+      continue;
     f.applyWhere(sqlQuery, params);
     f.applyParams(params, namedParameters);
   }

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { checkedFilter } from "../src/queryBuilders/providerMonthly.js";
+import { checkedFilter } from "../src/queryBuilders/providers/monthly.js";
 
 describe("checkedFilter", () => {
   it("returns true when flagged is true and unflagged is false", () => {
