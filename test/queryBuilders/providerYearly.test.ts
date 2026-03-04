@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import type { ProviderFilters } from "../../src/controllers/providerFilters.js";
+import type { ProviderFilters } from "../../src/types/provider.js";
 
 import { buildProviderYearlyQuery } from "../../src/queryBuilders/providers/yearly.js";
 
@@ -11,6 +11,8 @@ describe("buildProviderYearlyQuery", () => {
       year: "2023",
       offset: "0",
       cities: ["New York", "Los Angeles"],
+      month: "",
+      licenseCapacity: ""
     };
 
     const result = buildProviderYearlyQuery(params);

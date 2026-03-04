@@ -1,6 +1,6 @@
 import { SQL } from "sql-template-strings";
 
-import type { ProviderFilters } from "../../controllers/providerFilters.js";
+import type { FilterConfig, ProviderFilters } from "../../types/provider.js";
 
 import { parseOffsetParam } from "./monthly.js";
 
@@ -13,23 +13,6 @@ function parseRange(value?: string | undefined): { min: number | null; max: numb
     max: maxStr?.trim() ? Number(maxStr) : null,
   };
 }
-
-type FilterConfig = {
-  name: string;
-  selectExpr: string; // what to SELECT DISTINCT for facet
-  nullFilter: string;
-  searchable: boolean; // exclude nulls from facet results
-  facetType?: "distinct" | "range"; // default "distinct"
-  applyWhere: (
-    sqlQuery: any,
-    params: ProviderFilters
-  ) => void;
-  applyParams: (
-    params: ProviderFilters,
-    named: Record<string, any>
-  ) => void;
-  isActive: (params: ProviderFilters) => boolean;
-};
 
 const FILTERS: FilterConfig[] = [
   {
@@ -205,7 +188,7 @@ export function buildProviderYearlyQuery(params: ProviderFilters) {
 
 export function buildProviderYearlyFacetQuery(
   target: string,
-  params: Partial<Omit<ProviderFilters, "offset">> & { year: string },
+  params: ProviderFilters,
   search?: string,
   limit?: boolean,
 ) {

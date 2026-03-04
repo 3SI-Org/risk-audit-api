@@ -1,19 +1,10 @@
 import type express from "express";
 
+import type { ProviderFilters } from "../types/provider.js";
+
 import { queryData } from "../config/databricks.js";
 import { buildProviderMonthlyFacetQuery, checkedFilter } from "../queryBuilders/providers/monthly.js";
 import { buildProviderYearlyFacetQuery } from "../queryBuilders/providers/yearly.js";
-
-export type ProviderFilters = {
-  year: string;
-  month?: string;
-  offset?: string;
-  flagStatus?: boolean | null;
-  cities?: string[];
-  // cityName for iLike searches
-  cityName?: string;
-  licenseCapacity?: string;
-};
 
 function parseDate(date: string): { year: string; month?: string } {
   const parts = date.split("-");
@@ -23,38 +14,37 @@ function parseDate(date: string): { year: string; month?: string } {
   };
 }
 
+// Default to values that will not limit results if values are missing
 export function parseProviderFilters(req: express.Request): ProviderFilters {
-  const { year, month } = req.params.date
-    ? parseDate(req.params.date)
-    : { year: "2024", month: undefined };
-
-  const isFlagged = req.query.flagStatus === "true";
-  const isUnflagged = req.query.flagStatus === "false";
+  const { year, month } = parseDate(req.params.date);
 
   return {
-    year,
-    month,
+    year: year ?? "",
+    month: month ?? "",
     offset: String(req.query.offset || "0"),
-    flagStatus: checkedFilter({ flagged: isFlagged, unflagged: isUnflagged }),
-    cities: Array.isArray(req.query.cities)
+    flagStatus: checkedFilter({
+      flagged: req.query.flagStatus === "true",
+      unflagged: req.query.flagStatus === "false",
+    }),
+    cities: (Array.isArray(req.query.cities)
       ? req.query.cities.map(String)
-      : req.query.cities ? [String(req.query.cities)] : [],
-    cityName: (req.query?.cityName as string) || "",
-    licenseCapacity: req.query?.licensedCapacity as string | undefined,
+      : req.query.cities ? [String(req.query.cities)] : []
+    ).filter(c => c.trim() !== ""),
+    licenseCapacity: (req.query?.licensedCapacity as string) || "",
   };
 }
 
 function buildFacetQuery(
   target: string,
   date: string,
-  params: Record<string, any>,
+  params: ProviderFilters,
   search?: string,
   limit?: boolean,
 ) {
-  const { year, month } = parseDate(date);
+  const { month } = parseDate(date);
   return month
-    ? buildProviderMonthlyFacetQuery(target, { ...params, month }, search, limit)
-    : buildProviderYearlyFacetQuery(target, { ...params, year: year! }, search, limit);
+    ? buildProviderMonthlyFacetQuery(target, { ...params }, search, limit)
+    : buildProviderYearlyFacetQuery(target, { ...params }, search, limit);
 }
 
 export async function getProviderCities(req: express.Request, res: express.Response) {

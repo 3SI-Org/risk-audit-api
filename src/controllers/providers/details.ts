@@ -1,31 +1,10 @@
 import type express from "express";
 
+import type { ProviderDetailsData } from "../../types/provider.js";
+import type { UiProviderDetailsData } from "../../types/uiProvider.js";
+
 import { queryData } from "../../config/databricks.js";
 import { buildProviderDetailsQuery } from "../../queryBuilders/providers/details.js";
-
-export type ProviderDetailsData = {
-  provider_licensing_id: string;
-  provider_name: string;
-  postal_address: string;
-  city: string;
-  zip: string;
-  provider_status: string;
-  provider_type: string;
-  provider_email: string;
-  provider_phone: string;
-};
-
-export type UiProviderDetailsData = {
-  providerLicensingId: string;
-  providerName: string;
-  postalAddress: string;
-  city: string;
-  zip: string;
-  providerStatus: string;
-  providerType: string;
-  providerEmail: string;
-  providerPhone: string;
-};
 
 export async function getProviderDetails(req: express.Request, res: express.Response) {
   const provider_licensing_id = req.params.providerId;
