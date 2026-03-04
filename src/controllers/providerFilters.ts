@@ -26,12 +26,20 @@ export function parseProviderFilters(req: express.Request): ProviderFilters {
       flagged: req.query.flagStatus === "true",
       unflagged: req.query.flagStatus === "false",
     }),
+    licenseCapacity: (req.query?.licensedCapacity as string) || "",
+    overallRiskScore: (req.query?.overallRiskScore as string) || "",
     cities: (Array.isArray(req.query.cities)
       ? req.query.cities.map(String)
       : req.query.cities ? [String(req.query.cities)] : []
     ).filter(c => c.trim() !== ""),
-    licenseCapacity: (req.query?.licensedCapacity as string) || "",
-    overallRiskScore: (req.query?.overallRiskScore as string) || "",
+    facilityType: (Array.isArray(req.query.facilityType)
+      ? req.query.facilityType.map(String)
+      : req.query.facilityType ? [String(req.query.facilityType)] : []
+    ).filter(c => c.trim() !== ""),
+    status: (Array.isArray(req.query.status)
+      ? req.query.status.map(String)
+      : req.query.status ? [String(req.query.status)] : []
+    ).filter(c => c.trim() !== ""),
   };
 }
 
@@ -52,6 +60,34 @@ export async function getProviderCities(req: express.Request, res: express.Respo
   const filters = parseProviderFilters(req);
   const cityName = req.query?.cityName as string || "";
   const sql = buildFacetQuery("cities", req.params.date, filters, cityName, true);
+
+  try {
+    const rawData = await queryData(sql.text, sql.namedParameters) as any[];
+    res.json(rawData.map(item => item.option_value));
+  }
+  catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+}
+
+export async function getProviderFacilityType(req: express.Request, res: express.Response) {
+  const filters = parseProviderFilters(req);
+  const facilityType = req.query?.facilityType as string || "";
+  const sql = buildFacetQuery("facilityType", req.params.date, filters, facilityType, true);
+
+  try {
+    const rawData = await queryData(sql.text, sql.namedParameters) as any[];
+    res.json(rawData.map(item => item.option_value));
+  }
+  catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+}
+
+export async function getProviderStatus(req: express.Request, res: express.Response) {
+  const filters = parseProviderFilters(req);
+  const status = req.query?.status as string || "";
+  const sql = buildFacetQuery("status", req.params.date, filters, status, true);
 
   try {
     const rawData = await queryData(sql.text, sql.namedParameters) as any[];
