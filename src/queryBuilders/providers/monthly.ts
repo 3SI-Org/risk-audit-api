@@ -123,6 +123,38 @@ const FILTERS: FilterConfig[] = [
       return min !== null || max !== null;
     },
   },
+  {
+    name: "facilityType",
+    selectExpr: "base.provider_facility_type",
+    nullFilter: "AND base.provider_facility_type IS NOT NULL",
+    searchable: true,
+    applyWhere: (sql, params) => {
+      if (params.facilityType && params.facilityType.length > 0) {
+        sql.append(SQL` AND ARRAY_CONTAINS(TRANSFORM(SPLIT(:facilityType, ','), s -> TRIM(s)), base.provider_facility_type)`);
+      }
+    },
+    applyParams: (params, named) => {
+      if (params.facilityType && params.facilityType.length > 0)
+        named.facilityType = params.facilityType.join(",");
+    },
+    isActive: params => (params.facilityType && params.facilityType.length > 0) === true,
+  },
+    {
+    name: "status",
+    selectExpr: "base.provider_status",
+    nullFilter: "AND base.provider_status IS NOT NULL",
+    searchable: true,
+    applyWhere: (sql, params) => {
+      if (params.status && params.status.length > 0) {
+        sql.append(SQL` AND ARRAY_CONTAINS(TRANSFORM(SPLIT(:status, ','), s -> TRIM(s)), base.provider_status)`);
+      }
+    },
+    applyParams: (params, named) => {
+      if (params.status && params.status.length > 0)
+        named.status = params.status.join(",");
+    },
+    isActive: params => (params.status && params.status.length > 0) === true,
+  },
 ];
 // column alias can have filter refs; useful for total
 function appendBaseCTE(sqlQuery: any) {

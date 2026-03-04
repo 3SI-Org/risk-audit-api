@@ -49,6 +49,8 @@ export type AnnualProviderData = {
 };
 
 export type ProviderFilters = {
+  facilityType: string[];
+  status: string[];
   year: string;
   month: string;
   offset: string;
