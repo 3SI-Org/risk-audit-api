@@ -1,4 +1,3 @@
-import SQL from "sql-template-strings";
 import { describe, expect, it } from "vitest";
 
 import { buildPlacedOverCapacityQuery } from "../../../src/queryBuilders/scenarioQueries/placedOverCapacity.js";

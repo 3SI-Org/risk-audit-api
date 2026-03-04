@@ -8,7 +8,7 @@ import { parseBilledOverWeeks, parseDistanceWeeks, parsePlacedOverWeeks, parseSa
 
 const mockQueryData = vi.hoisted(() => vi.fn());
 
-vi.mock("./../src/services/queryService.js", () => ({
+vi.mock("./../src/config/databricks.js", () => ({
   queryData: mockQueryData,
 }));
 
@@ -116,6 +116,7 @@ describe("Helper functions in providerScenario", () => {
       const res = await request(app).get("/api/v1/scenario/placed/123");
 
       expect(res.status).toBe(200);
+      console.log(res.body);
       expect(res.body).toEqual([
         {
           serviceMonth: "2026-01-01",

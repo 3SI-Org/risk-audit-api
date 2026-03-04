@@ -1,16 +1,18 @@
 import { describe, expect, it } from "vitest";
 
-import type { BuildProviderYearlyQueryParams } from "../../src/queryBuilders/providerYearly.js";
+import type { ProviderFilters } from "../../src/types/provider.js";
 
-import { buildProviderYearlyQuery } from "../../src/queryBuilders/providerYearly.js";
+import { buildProviderYearlyQuery } from "../../src/queryBuilders/providers/yearly.js";
 
 describe("buildProviderYearlyQuery", () => {
   it("should return a valid SQL query with named parameters", () => {
-    const params: BuildProviderYearlyQueryParams = {
-      isFlagged: true,
+    const params: ProviderFilters = {
+      flagStatus: true,
       year: "2023",
       offset: "0",
       cities: ["New York", "Los Angeles"],
+      month: "",
+      licenseCapacity: ""
     };
 
     const result = buildProviderYearlyQuery(params);
@@ -20,7 +22,7 @@ describe("buildProviderYearlyQuery", () => {
     expect(result.namedParameters).toEqual({
       year: "2023",
       offset: 0,
-      isFlagged: true,
+      flagStatus: true,
       cities: "New York,Los Angeles",
     });
   });
