@@ -31,6 +31,7 @@ export function parseProviderFilters(req: express.Request): ProviderFilters {
       : req.query.cities ? [String(req.query.cities)] : []
     ).filter(c => c.trim() !== ""),
     licenseCapacity: (req.query?.licensedCapacity as string) || "",
+    overallRiskScore: (req.query?.overallRiskScore as string) || "",
   };
 }
 
@@ -73,3 +74,17 @@ export async function getLicenseCapacity(req: express.Request, res: express.Resp
     res.status(500).json({ error: err.message });
   }
 }
+
+export async function getOverallRiskScore(req: express.Request, res: express.Response) {
+  const filters = parseProviderFilters(req);
+  const sql = buildFacetQuery("overallRiskScore", req.params.date, filters);
+
+  try {
+    const rawData = await queryData(sql.text, sql.namedParameters) as any[];
+    res.json(rawData[0] ?? { min_value: null, max_value: null });
+  }
+  catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+}
+

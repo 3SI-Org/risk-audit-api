@@ -24,6 +24,9 @@ export type UiMonthlyProviderData = {
   postalAddress: string;
   city: string;
   zip: string;
+  capacityLicensed: string;
+  providerFacilityType: string;
+  providerStatus: string;
 };
 
 export type UiAnnualProviderData = {
@@ -39,4 +42,7 @@ export type UiAnnualProviderData = {
   postalAddress: string;
   city: string;
   zip: string;
+  capacityLicensed: string;
+  providerFacilityType: string;
+  providerStatus: string;
 };

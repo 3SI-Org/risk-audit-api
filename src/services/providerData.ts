@@ -76,6 +76,9 @@ function transformMonthlyData(rawData: MonthlyProviderData[]): UiMonthlyProvider
     postalAddress: item.postal_address || "--",
     city: item.city || "--",
     zip: item.zip || "--",
+    capacityLicensed: item?.capacity_licensed || "--",
+    providerFacilityType: item?.provider_facility_type || "--",
+    providerStatus: item?.provider_status || "--",
   }));
 }
 

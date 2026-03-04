@@ -40,15 +40,15 @@ function parseRange(value?: string | undefined): { min: number | null; max: numb
 const FILTERS: FilterConfig[] = [
   {
     name: "flagStatus",
-    selectExpr: "pi.is_flagged",
-    nullFilter: "AND pi.is_flagged IS NOT NULL",
+    selectExpr: "base.is_flagged",
+    nullFilter: "AND base.is_flagged IS NOT NULL",
     searchable: false,
     applyWhere: (sql, params) => {
       if (params.flagStatus !== null && params.flagStatus !== false) {
-        sql.append(SQL` AND pi.is_flagged = :flagStatus`);
+        sql.append(SQL` AND base.is_flagged = :flagStatus`);
       }
       if (params.flagStatus === false) {
-        sql.append(SQL` AND (pi.is_flagged IS NULL OR pi.is_flagged = :flagStatus)`);
+        sql.append(SQL` AND (base.is_flagged IS NULL OR base.is_flagged = :flagStatus)`);
       }
     },
     applyParams: (params, named) => {
@@ -59,12 +59,12 @@ const FILTERS: FilterConfig[] = [
   },
   {
     name: "cities",
-    selectExpr: "a.city",
-    nullFilter: "AND a.city IS NOT NULL",
+    selectExpr: "base.city",
+    nullFilter: "AND base.city IS NOT NULL",
     searchable: true,
     applyWhere: (sql, params) => {
       if (params.cities && params.cities.length > 0) {
-        sql.append(SQL` AND ARRAY_CONTAINS(TRANSFORM(SPLIT(:cities, ','), s -> TRIM(s)), a.city)`);
+        sql.append(SQL` AND ARRAY_CONTAINS(TRANSFORM(SPLIT(:cities, ','), s -> TRIM(s)), base.city)`);
       }
     },
     applyParams: (params, named) => {
@@ -75,38 +75,66 @@ const FILTERS: FilterConfig[] = [
   },
   {
     name: "licenseCapacity",
-    selectExpr: "rp.capacity_licensed",
-    nullFilter: "AND rp.capacity_licensed IS NOT NULL",
+    selectExpr: "base.capacity_licensed",
+    nullFilter: "AND base.capacity_licensed IS NOT NULL",
     searchable: false,
     facetType: "range",
     applyWhere: (sql, params) => {
       const { min, max } = parseRange(params.licenseCapacity);
       if (min !== null) {
-        sql.append(SQL` AND rp.capacity_licensed >= :capacityMin`);
+        sql.append(SQL` AND base.capacity_licensed >= :capacityMin`);
       }
       if (max !== null) {
-        sql.append(SQL` AND rp.capacity_licensed <= :capacityMax`);
+        sql.append(SQL` AND base.capacity_licensed <= :capacityMax`);
       }
     },
     applyParams: (params, named) => {
       const { min, max } = parseRange(params.licenseCapacity);
-      if (min !== null)
-        named.capacityMin = min;
-      if (max !== null)
-        named.capacityMax = max;
+      if (min !== null) named.capacityMin = min;
+      if (max !== null) named.capacityMax = max;
     },
     isActive: (params) => {
       const { min, max } = parseRange(params.licenseCapacity);
       return min !== null || max !== null;
     },
   },
-
-
-
-
-
-  
+  {
+    name: "overallRiskScore",
+    selectExpr: "base.total",
+    nullFilter: "AND base.total IS NOT NULL",
+    searchable: false,
+    facetType: "range",
+    applyWhere: (sql, params) => {
+      const { min, max } = parseRange(params.overallRiskScore);
+      if (min !== null) {
+        sql.append(SQL` AND base.total >= :riskScoreMin`);
+      }
+      if (max !== null) {
+        sql.append(SQL` AND base.total <= :riskScoreMax`);
+      }
+    },
+    applyParams: (params, named) => {
+      const { min, max } = parseRange(params.overallRiskScore);
+      if (min !== null) named.riskScoreMin = min;
+      if (max !== null) named.riskScoreMax = max;
+    },
+    isActive: (params) => {
+      const { min, max } = parseRange(params.overallRiskScore);
+      return min !== null || max !== null;
+    },
+  },
 ];
+// column alias can have filter refs; useful for total
+function appendBaseCTE(sqlQuery: any) {
+  sqlQuery.append(SQL`
+    WITH base AS (
+  `);
+  appendBaseQuery(sqlQuery);
+  appendJoins(sqlQuery);
+  sqlQuery.append(SQL`
+    )
+  `);
+}
 
 function appendBaseQuery(sqlQuery: any) {
   sqlQuery.append(SQL`
@@ -155,19 +183,22 @@ function appendJoins(sqlQuery: any) {
 
 export function buildProviderMonthlyQuery(params: ProviderFilters) {
   const sqlQuery = SQL``;
-  appendBaseQuery(sqlQuery);
-  appendJoins(sqlQuery);
+  appendBaseCTE(sqlQuery);
 
-  const namedParameters: Record<string, any> = { month: parseMonthParam(params.month!) };
+  sqlQuery.append(SQL`
+      SELECT * FROM base
+      WHERE 1=1
+    `)
+
+  const namedParameters: Record<string, any> = { month: parseMonthParam(params.month) };
   for (const filter of FILTERS) {
     filter.applyWhere(sqlQuery, params);
     filter.applyParams(params, namedParameters);
   }
 
-  sqlQuery.append(SQL` ORDER BY total DESC, dates.provider_licensing_id`);
+  sqlQuery.append(SQL` ORDER BY base.total DESC, base.provider_licensing_id`);
   sqlQuery.append(SQL` LIMIT 200 OFFSET :offset`);
   namedParameters.offset = parseOffsetParam(params.offset);
-
   return { text: sqlQuery.text, namedParameters };
 }
 
@@ -182,15 +213,13 @@ export function buildProviderMonthlyFacetQuery(
     throw new Error(`Unknown filter: ${target}`);
 
   const sqlQuery = SQL``;
+  appendBaseCTE(sqlQuery);
 
   if (filter.facetType === "range") {
-    sqlQuery.append(` SELECT MIN(${filter.selectExpr}) AS min_value, MAX(${filter.selectExpr}) AS max_value`);
+    sqlQuery.append(` SELECT MIN(${filter.selectExpr}) AS min_value, MAX(${filter.selectExpr}) AS max_value FROM base WHERE 1=1`);
+  } else {
+    sqlQuery.append(` SELECT DISTINCT ${filter.selectExpr} AS option_value FROM base WHERE 1=1`);
   }
-  else {
-    sqlQuery.append(` SELECT DISTINCT ${filter.selectExpr} AS option_value`);
-  }
-
-  appendJoins(sqlQuery);
 
   const namedParameters: Record<string, any> = { month: parseMonthParam(params.month) };
   for (const f of FILTERS) {

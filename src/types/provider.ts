@@ -11,6 +11,9 @@ export type ProviderDetailsData = {
 };
 
 export type MonthlyProviderData = {
+  capacity_licensed: string;
+  provider_facility_type: string;
+  provider_status: string;
   provider_licensing_id: string;
   provider_name: string;
   StartOfMonth: string;
@@ -52,6 +55,7 @@ export type ProviderFilters = {
   flagStatus: boolean | null;
   cities: string[];
   licenseCapacity: string;
+  overallRiskScore: string;
 };
 
 export type FilterConfig = {

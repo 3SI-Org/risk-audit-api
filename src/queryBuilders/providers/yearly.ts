@@ -77,6 +77,27 @@ const FILTERS: FilterConfig[] = [
       return min !== null || max !== null;
     },
   },
+  {
+    name: "overallRiskScore",
+    selectExpr: "c.overall_risk_score",
+    nullFilter: "AND c.overall_risk_score IS NOT NULL",
+    searchable: false,
+    facetType: "range",
+    applyWhere: (sql, params) => {
+      const { min, max } = parseRange(params.overallRiskScore);
+      if (min !== null) sql.append(SQL` AND c.overall_risk_score >= :riskScoreMin`);
+      if (max !== null) sql.append(SQL` AND c.overall_risk_score <= :riskScoreMax`);
+    },
+    applyParams: (params, named) => {
+      const { min, max } = parseRange(params.overallRiskScore);
+      if (min !== null) named.riskScoreMin = min;
+      if (max !== null) named.riskScoreMax = max;
+    },
+    isActive: (params) => {
+      const { min, max } = parseRange(params.overallRiskScore);
+      return min !== null || max !== null;
+    },
+  }
   // ---- add new filters here ----
   // {
   //   name: "zipCodes",

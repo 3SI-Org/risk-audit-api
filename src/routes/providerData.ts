@@ -1,6 +1,6 @@
 import { Router } from "express";
 
-import { getLicenseCapacity, getProviderCities } from "../controllers/providerFilters.js";
+import { getLicenseCapacity, getOverallRiskScore, getProviderCities } from "../controllers/providerFilters.js";
 import { getProviderDataInsights, updateProviderDataInsights } from "../controllers/providerInsights.js";
 import { getProviderDetails } from "../controllers/providers/details.js";
 import { exportProviderDataMonthly, getProviderMonthData } from "../controllers/providers/monthly.js";
@@ -12,6 +12,7 @@ const router = Router();
 
 router.route("/cities/:date").get(authenticateJWT, getProviderCities);
 router.route("/license-capacity/:date").get(authenticateJWT, getLicenseCapacity);
+router.route("/risk-score/:date").get(authenticateJWT, getOverallRiskScore);
 
 router.route("/export/year/:date")
   .get(authenticateJWT, exportProviderDataYearly);
